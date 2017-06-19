@@ -1,5 +1,6 @@
 package mixit
 
+import kotlinx.coroutines.experimental.runBlocking
 import mixit.repository.EventRepository
 import mixit.repository.PostRepository
 import mixit.repository.TalkRepository
@@ -14,7 +15,7 @@ class DatabaseInitializer(val userRepository: UserRepository,
                           val postRepository: PostRepository) {
 
     @PostConstruct
-    fun init() {
+    fun init() = runBlocking {
         userRepository.initData()
         eventRepository.initData()
         talkRepository.initData()

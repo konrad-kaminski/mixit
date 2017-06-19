@@ -1,20 +1,20 @@
 package mixit.web.handler
 
 import mixit.MixitProperties
-import mixit.util.seeOther
+import org.springframework.web.coroutine.function.server.CoroutineServerRequest
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse.Companion.ok
+import mixit.util.coroutine.seeOther
 import org.springframework.stereotype.Component
-import org.springframework.web.reactive.function.BodyExtractors.*
-import org.springframework.web.reactive.function.server.*
-import org.springframework.web.reactive.function.server.ServerResponse.*
+import org.springframework.web.coroutine.function.toFormData
 
 
 @Component
 class AuthenticationHandler(val properties: MixitProperties) {
 
-    fun loginView(req: ServerRequest) = ok().render("login")
+    suspend fun loginView(req: CoroutineServerRequest) = ok().render("login")
 
-    fun login(req: ServerRequest) = req.body(toFormData()).flatMap { data ->
-        req.session().flatMap { session ->
+    suspend fun login(req: CoroutineServerRequest) = req.body(toFormData())?.let { data ->
+        req.session()?.let { session ->
             val formData = data.toSingleValueMap()
             if (formData["username"] == properties.admin.username && formData["password"] == properties.admin.password) {
                 session.attributes["username"] =  data.toSingleValueMap()["username"]

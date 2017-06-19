@@ -1,21 +1,19 @@
 package mixit.repository
 
 import mixit.model.*
-import mixit.util.findAll
+import mixit.util.coroutine.findAll
 import org.slf4j.LoggerFactory
-import org.springframework.data.mongodb.core.ReactiveMongoTemplate
+import org.springframework.data.mongodb.core.CoroutineMongoTemplate
 import org.springframework.stereotype.Repository
 
 
 @Repository
-class TicketRepository(val template: ReactiveMongoTemplate) {
+class TicketRepository(val template: CoroutineMongoTemplate
+) {
 
     private val logger = LoggerFactory.getLogger(this.javaClass)
 
-    fun save(ticket: Ticket) =
-            template.insert(ticket).doOnSuccess { _ -> logger.info("Save new ticket $ticket") }
-
-    fun findAll() = template.findAll<Ticket>()
+    suspend fun findAll() = template.findAll<Ticket>()
 
 
 }

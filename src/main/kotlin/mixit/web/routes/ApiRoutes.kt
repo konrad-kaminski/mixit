@@ -3,8 +3,8 @@ package mixit.web
 import mixit.web.handler.*
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.http.MediaType.*
-import org.springframework.web.reactive.function.server.router
+import org.springframework.web.coroutine.function.server.router
+import org.springframework.http.MediaType.APPLICATION_JSON
 
 
 @Configuration
@@ -17,28 +17,29 @@ class ApiRoutes(val blogHandler: BlogHandler,
     fun apiRouter() = router {
         (accept(APPLICATION_JSON) and "/api").nest {
             "/blog".nest {
-                GET("/", blogHandler::findAll)
-                GET("/{id}", blogHandler::findOne)
+                GET("/") { blogHandler.findAll(it) }
+                GET("/{id}") { blogHandler.findOne(it) }
             }
 
             "/event".nest {
-                GET("/", eventHandler::findAll)
-                GET("/{id}", eventHandler::findOne)
+                GET("/") { eventHandler.findAll(it) }
+                GET("/{id}") { eventHandler.findOne(it) }
             }
 
+
             // Talks
-            GET("/talk/{login}", talkHandler::findOne)
-            GET("/{year}/talk", talkHandler::findByEventId)
+            GET("/talk/{login}") { talkHandler.findOne(it) }
+            GET("/{year}/talk") { talkHandler.findByEventId(it) }
 
             // users
             "/user".nest {
-                GET("/", userHandler::findAll)
-                POST("/", userHandler::create)
-                GET("/{login}", userHandler::findOne)
+                GET("/") { userHandler.findAll(it) }
+                POST("/") { userHandler.create(it) }
+                GET("/{login}") { userHandler.findOne(it) }
             }
             "/staff".nest {
-                GET("/", userHandler::findStaff)
-                GET("/{login}", userHandler::findOneStaff)
+                GET("/") { userHandler.findStaff(it) }
+                GET("/{login}") { userHandler.findOneStaff(it) }
             }
         }
     }

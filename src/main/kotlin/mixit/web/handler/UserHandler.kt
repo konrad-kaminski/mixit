@@ -2,11 +2,13 @@ package mixit.web.handler
 
 import mixit.model.*
 import mixit.repository.UserRepository
-import mixit.util.*
+import mixit.util.coroutine.json
 import org.springframework.stereotype.Component
-import org.springframework.web.reactive.function.server.*
-import org.springframework.web.reactive.function.server.ServerResponse.*
-import reactor.core.publisher.toMono
+import org.springframework.web.coroutine.function.server.CoroutineServerRequest
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse.Companion.created
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse.Companion.ok
+import org.springframework.web.coroutine.function.server.body
+import org.springframework.web.coroutine.function.server.language
 import java.net.URI.*
 import java.net.URLDecoder
 
@@ -14,28 +16,28 @@ import java.net.URLDecoder
 @Component
 class UserHandler(val repository: UserRepository) {
 
-    fun findOneView(req: ServerRequest) =
+    suspend fun findOneView(req: CoroutineServerRequest) =
             try {
-                val idLegacy = req.pathVariable("login").toLong()
-                repository.findByLegacyId(idLegacy).flatMap {
+                val idLegacy = req.pathVariable("login")!!.toLong()
+                repository.findByLegacyId(idLegacy)?.let {
                     ok().render("user", mapOf(Pair("user", it.toDto(req.language()))))
                 }
             } catch (e:NumberFormatException) {
-                repository.findOne(URLDecoder.decode(req.pathVariable("login"), "UTF-8")).flatMap {
+                repository.findOne(URLDecoder.decode(req.pathVariable("login"), "UTF-8"))?.let {
                     ok().render("user", mapOf(Pair("user", it.toDto(req.language()))))
                 }
             }
 
-    fun findOne(req: ServerRequest) = ok().json().body(repository.findOne(req.pathVariable("login")))
+    suspend fun findOne(req: CoroutineServerRequest) = ok().json().body(repository.findOne(req.pathVariable("login")!!))
 
-    fun findAll(req: ServerRequest) = ok().json().body(repository.findAll())
+    suspend fun findAll(req: CoroutineServerRequest) = ok().json().body(repository.findAll(), User::class.java)
 
-    fun findStaff(req: ServerRequest) = ok().json().body(repository.findByRole(Role.STAFF))
+    suspend fun findStaff(req: CoroutineServerRequest) = ok().json().body(repository.findByRole(Role.STAFF))
 
-    fun findOneStaff(req: ServerRequest) = ok().json().body(repository.findOneByRole(req.pathVariable("login"), Role.STAFF))
+    suspend fun findOneStaff(req: CoroutineServerRequest) = ok().json().body(repository.findOneByRole(req.pathVariable("login")!!, Role.STAFF))
 
-    fun create(req: ServerRequest) = repository.save(req.bodyToMono<User>()).flatMap {
-        created(create("/api/user/${it.login}")).json().body(it.toMono())
+    suspend fun create(req: CoroutineServerRequest) = repository.save(req.body<User>())?.let {
+        created(create("/api/user/${it.login}")).json().body(it)
     }
 
 }

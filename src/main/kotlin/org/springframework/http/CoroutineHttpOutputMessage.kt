@@ -1,0 +1,3 @@
+package org.springframework.http
+
+interface CoroutineHttpOutputMessage: HttpMessage

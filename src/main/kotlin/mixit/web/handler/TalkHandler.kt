@@ -1,15 +1,25 @@
 package mixit.web.handler
 
 import mixit.MixitProperties
-import mixit.model.*
+import mixit.model.Language
+import mixit.model.Talk
+import mixit.model.TalkFormat
+import mixit.model.User
 import mixit.repository.TalkRepository
 import mixit.repository.UserRepository
-import mixit.util.*
+import mixit.util.coroutine.collectList
+import mixit.util.coroutine.collectMap
+import mixit.util.coroutine.permanentRedirect
+import mixit.util.formatTalkDate
+import mixit.util.formatTalkTime
+import mixit.util.coroutine.json
 import org.springframework.stereotype.Component
-import org.springframework.web.reactive.function.server.*
-import org.springframework.web.reactive.function.server.ServerResponse.*
+import org.springframework.web.coroutine.function.server.CoroutineServerRequest
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse.Companion.ok
+import org.springframework.web.coroutine.function.server.body
+import org.springframework.web.coroutine.function.server.language
 import org.springframework.web.util.UriUtils
-import reactor.core.publisher.Mono
 import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
 
@@ -19,31 +29,32 @@ class TalkHandler(val repository: TalkRepository,
                   val userRepository: UserRepository,
                   val properties: MixitProperties) {
 
-    fun findByEventView(year: Int, req: ServerRequest, topic: String? = null): Mono<ServerResponse> {
+    suspend fun findByEventView(year: Int, req: CoroutineServerRequest, topic: String? = null): CoroutineServerResponse? {
         val talks = repository
                 .findByEvent(year.toString(), topic)
                 .collectList()
-                .flatMap { talks -> userRepository
-                        .findMany(talks.flatMap(Talk::speakerIds))
-                        .collectMap(User::login)
-                        .map { speakers -> talks.map { it.toDto(req.language(), it.speakerIds.mapNotNull { speakers[it] }) }.groupBy { it.date } }
+                .let { talks ->
+                    userRepository
+                     .findMany(talks.flatMap(Talk::speakerIds))
+                     .collectMap(User::login)
+                     .let { speakers -> talks.map { it.toDto(req.language(), it.speakerIds.mapNotNull { speakers[it] }) }.groupBy { it.date } }
                 }
 
-        return ok().render("talks", mapOf(
+        return CoroutineServerResponse.ok().render("talks", mapOf(
                 Pair("talks", talks),
                 Pair("year", year),
                 Pair("title", when(topic) { null -> "talks.title.html|$year" else -> "talks.title.html.$topic|$year" }),
                 Pair("baseUri", UriUtils.encode(properties.baseUri, StandardCharsets.UTF_8)),
                 Pair("topic", topic),
-                Pair("has2Columns", talks.map { it.size == 2 })
+                Pair("has2Columns", talks.size == 2)
         ))
     }
 
 
-    fun findOneView(year: Int, req: ServerRequest) = repository.findByEventAndSlug(year.toString(), req.pathVariable("slug")).flatMap { talk ->
-        userRepository.findMany(talk.speakerIds).collectList().flatMap { speakers ->
+    suspend fun findOneView(year: Int, req: CoroutineServerRequest) = repository.findByEventAndSlug(year.toString(), req.pathVariable("slug")!!)?.let { talk ->
+        userRepository.findMany(talk.speakerIds).collectList().let { speakers ->
         ok().render("talk", mapOf(
-                Pair("talk", talk.toDto(req.language(), speakers!!)),
+                Pair("talk", talk.toDto(req.language(), speakers)),
                 Pair("speakers", speakers.map { it.toDto(req.language()) }.sortedBy { talk.speakerIds.indexOf(it.login) }),
                 Pair("title", "talk.html.title|${talk.title}"),
                 Pair("baseUri", UriUtils.encode(properties.baseUri, StandardCharsets.UTF_8)),
@@ -51,16 +62,16 @@ class TalkHandler(val repository: TalkRepository,
         ))
     }}
 
-    fun findOne(req: ServerRequest) = ok().json().body(repository.findOne(req.pathVariable("login")))
+    suspend fun findOne(req: CoroutineServerRequest) = ok().json().body(repository.findOne(req.pathVariable("login")!!))
 
-    fun findByEventId(req: ServerRequest) =
-            ok().json().body(repository.findByEvent(req.pathVariable("year")))
+    suspend fun findByEventId(req: CoroutineServerRequest) =
+            ok().json().body(repository.findByEvent(req.pathVariable("year")!!), Talk::class.java)
 
-    fun redirectFromId(req: ServerRequest) = repository.findOne(req.pathVariable("id")).flatMap {
+    suspend fun redirectFromId(req: CoroutineServerRequest) = repository.findOne(req.pathVariable("id")!!)?.let {
         permanentRedirect("${properties.baseUri}/${it.event}/${it.slug}")
     }
 
-    fun redirectFromSlug(req: ServerRequest) = repository.findBySlug(req.pathVariable("slug")).flatMap {
+    suspend fun redirectFromSlug(req: CoroutineServerRequest) = repository.findBySlug(req.pathVariable("slug")!!)?.let {
         permanentRedirect("${properties.baseUri}/${it.event}/${it.slug}")
     }
 

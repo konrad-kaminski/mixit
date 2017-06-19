@@ -12,15 +12,16 @@ import mixit.repository.PostRepository
 import mixit.repository.TalkRepository
 import mixit.repository.TicketRepository
 import mixit.repository.UserRepository
-import mixit.util.language
-import mixit.util.seeOther
+import mixit.util.coroutine.collectList
+import mixit.util.coroutine.collectMap
 import mixit.util.toSlug
+import org.springframework.web.coroutine.function.server.CoroutineServerRequest
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse.Companion.ok
+import mixit.util.coroutine.seeOther
+import org.springframework.web.coroutine.function.toFormData
 import org.springframework.stereotype.Component
-import org.springframework.web.reactive.function.BodyExtractors
-import org.springframework.web.reactive.function.server.ServerRequest
-import org.springframework.web.reactive.function.server.ServerResponse
-import org.springframework.web.reactive.function.server.ServerResponse.*
-import reactor.core.publisher.Mono
+import org.springframework.web.coroutine.function.server.language
 import java.time.LocalDateTime
 
 
@@ -32,39 +33,39 @@ class AdminHandler(val ticketRepository: TicketRepository,
                    val properties: MixitProperties,
                    val objectMapper: ObjectMapper) {
 
-    fun admin(req: ServerRequest) =
+    suspend fun admin(req: CoroutineServerRequest) =
             ok().render("admin", mapOf(Pair("title", "admin.title")))
 
-    fun adminTicketing(req: ServerRequest) =
+    suspend fun adminTicketing(req: CoroutineServerRequest) =
             ok().render("admin-ticketing", mapOf(
                 Pair("tickets", ticketRepository.findAll()),
                 Pair("title", "admin.ticketing.title")
             ))
 
-    fun adminTalks(req: ServerRequest) =
+    suspend fun adminTalks(req: CoroutineServerRequest) =
             ok().render("admin-talks", mapOf(
                 Pair("talks", talkRepository
                         .findByEvent("2017")
                         .collectList()
-                        .flatMap { talks ->
+                        .let { talks ->
                             userRepository
                                 .findMany(talks.flatMap(Talk::speakerIds))
                                 .collectMap(User::login)
-                                .map { speakers -> talks.map { it.toDto(req.language(), it.speakerIds.mapNotNull { speakers[it] }) } }
+                                .let { speakers -> talks.map { it.toDto(req.language(), it.speakerIds.mapNotNull { speakers[it] }) } }
                         }),
                 Pair("title", "admin.talks.title")
             ))
 
 
-    fun adminUsers(req: ServerRequest) = ok().render("admin-users", mapOf(Pair("users", userRepository.findAll()), Pair("title", "admin.users.title")))
+    suspend fun adminUsers(req: CoroutineServerRequest) = ok().render("admin-users", mapOf(Pair("users", userRepository.findAll()), Pair("title", "admin.users.title")))
 
 
-    fun createTalk(req: ServerRequest) : Mono<ServerResponse> = this.adminTalk()
+    suspend fun createTalk(req: CoroutineServerRequest) : CoroutineServerResponse? = this.adminTalk()
 
-    fun editTalk(req: ServerRequest) : Mono<ServerResponse> = talkRepository.findBySlug(req.pathVariable("slug")).flatMap(this::adminTalk)
+    suspend fun editTalk(req: CoroutineServerRequest) : CoroutineServerResponse? = talkRepository.findBySlug(req.pathVariable("slug")!!)?.let { adminTalk(it) }
 
-    fun adminSaveTalk(req: ServerRequest) : Mono<ServerResponse> {
-        return req.body(BodyExtractors.toFormData()).flatMap {
+    suspend fun adminSaveTalk(req: CoroutineServerRequest) : CoroutineServerResponse? {
+        return req.body(toFormData())?.let {
             val formData = it.toSingleValueMap()
             val talk = Talk(
                     id = formData["id"],
@@ -82,20 +83,20 @@ class AdminHandler(val ticketRepository: TicketRepository,
                     start = LocalDateTime.parse(formData["start"]),
                     end = LocalDateTime.parse(formData["end"])
             )
-            talkRepository.save(talk).then(seeOther("${properties.baseUri}/admin/talks"))
+            talkRepository.save(talk)
+            seeOther("${properties.baseUri}/admin/talks")
         }
     }
 
-    fun adminDeleteTalk(req: ServerRequest) : Mono<ServerResponse> =
-            req.body(BodyExtractors.toFormData()).flatMap {
+    suspend fun adminDeleteTalk(req: CoroutineServerRequest) : CoroutineServerResponse? =
+            req.body(toFormData())?.let {
                 val formData = it.toSingleValueMap()
-                talkRepository
-                        .deleteOne(formData["id"]!!)
-                        .then(seeOther("${properties.baseUri}/admin/talks"))
+                talkRepository.deleteOne(formData["id"]!!)
+                seeOther("${properties.baseUri}/admin/talks")
             }
 
 
-    private fun adminTalk(talk: Talk = Talk(TALK, "mixit17", "", "")) = ok().render("admin-talk", mapOf(
+    private suspend fun adminTalk(talk: Talk = Talk(TALK, "mixit17", "", "")) = ok().render("admin-talk", mapOf(
             Pair("talk", talk),
             Pair("title", "admin.talk.title"),
             Pair("rooms", listOf(
@@ -133,19 +134,21 @@ class AdminHandler(val ticketRepository: TicketRepository,
 
     ))
 
-    fun createUser(req: ServerRequest): Mono<ServerResponse> = this.adminUser()
+    suspend fun createUser(req: CoroutineServerRequest): CoroutineServerResponse? = this.adminUser()
 
-    fun editUser(req: ServerRequest): Mono<ServerResponse> = userRepository.findOne(req.pathVariable("login")).flatMap(this::adminUser)
+    suspend fun editUser(req: CoroutineServerRequest): CoroutineServerResponse? = userRepository.findOne(req.pathVariable("login")!!)?.let {
+        adminUser(it)
+    }
 
-    fun adminDeleteUser(req: ServerRequest): Mono<ServerResponse> =
-            req.body(BodyExtractors.toFormData()).flatMap {
+    suspend fun adminDeleteUser(req: CoroutineServerRequest): CoroutineServerResponse? =
+            req.body(toFormData())?.let {
                 val formData = it.toSingleValueMap()
                 userRepository
                         .deleteOne(formData["login"]!!)
-                        .then(seeOther("${properties.baseUri}/admin/users"))
+                seeOther("${properties.baseUri}/admin/users")
             }
 
-    private fun adminUser(user: User = User("", "", "", "")) = ok().render("admin-user", mapOf(
+    private suspend fun adminUser(user: User = User("", "", "", "")) = ok().render("admin-user", mapOf(
             Pair("user", user),
             Pair("description-fr", user.description[FRENCH]),
             Pair("description-en", user.description[ENGLISH]),
@@ -157,8 +160,8 @@ class AdminHandler(val ticketRepository: TicketRepository,
 
     ))
 
-    fun adminSaveUser(req: ServerRequest) : Mono<ServerResponse> {
-        return req.body(BodyExtractors.toFormData()).flatMap {
+    suspend fun adminSaveUser(req: CoroutineServerRequest) : CoroutineServerResponse? {
+        return req.body(toFormData())?.let {
             val formData = it.toSingleValueMap()
             val user = User(
                     login = formData["login"]!!,
@@ -173,32 +176,32 @@ class AdminHandler(val ticketRepository: TicketRepository,
                     links =  formData["links"]!!.toLinks(),
                     legacyId = if (formData["legacyId"] == "") null else formData["legacyId"]!!.toLong()
             )
-            userRepository.save(user).then(seeOther("${properties.baseUri}/admin/users"))
+            userRepository.save(user)
+            seeOther("${properties.baseUri}/admin/users")
         }
     }
 
-    fun adminBlog(req: ServerRequest) : Mono<ServerResponse> = ok().render("admin-blog", mapOf(Pair("posts", postRepository.findAll().collectList()
-            .flatMap { posts -> userRepository
+    suspend fun adminBlog(req: CoroutineServerRequest) = ok().render("admin-blog", mapOf(Pair("posts", postRepository.findAll().collectList()
+            .let { posts -> userRepository
                     .findMany(posts.map { it.authorId })
                     .collectMap(User::login)
-                    .map { authors -> posts.map { it.toDto(authors[it.authorId]!!, req.language()) } }
+                    .let { authors -> posts.map { it.toDto(authors[it.authorId]!!, req.language()) } }
             }), Pair("title", "admin.blog.title")))
 
 
+    suspend fun createPost(req: CoroutineServerRequest): CoroutineServerResponse? = this.adminPost()
 
-    fun createPost(req: ServerRequest): Mono<ServerResponse> = this.adminPost()
+    suspend fun editPost(req: CoroutineServerRequest): CoroutineServerResponse? = postRepository.findOne(req.pathVariable("id")!!)?.let { adminPost(it) }
 
-    fun editPost(req: ServerRequest): Mono<ServerResponse> = postRepository.findOne(req.pathVariable("id")).flatMap(this::adminPost)
-
-    fun adminDeletePost(req: ServerRequest): Mono<ServerResponse> =
-            req.body(BodyExtractors.toFormData()).flatMap {
+    suspend fun adminDeletePost(req: CoroutineServerRequest): CoroutineServerResponse? =
+            req.body(toFormData())?.let {
                 val formData = it.toSingleValueMap()
                 postRepository
                         .deleteOne(formData["id"]!!)
-                        .then(seeOther("${properties.baseUri}/admin/blog"))
+                seeOther("${properties.baseUri}/admin/blog")
             }
 
-    private fun adminPost(post: Post = Post("")) = ok().render("admin-post", mapOf(
+    private suspend fun adminPost(post: Post = Post("")) = ok().render("admin-post", mapOf(
             Pair("post", post),
             Pair("title-fr", post.title[FRENCH]),
             Pair("title-en", post.title[ENGLISH]),
@@ -208,8 +211,8 @@ class AdminHandler(val ticketRepository: TicketRepository,
             Pair("content-en", post.content?.get(ENGLISH))
     ))
 
-    fun adminSavePost(req: ServerRequest) : Mono<ServerResponse> {
-        return req.body(BodyExtractors.toFormData()).flatMap {
+    suspend fun adminSavePost(req: CoroutineServerRequest) : CoroutineServerResponse? {
+        return req.body(toFormData())?.let {
             val formData = it.toSingleValueMap()
             val post = Post(
                     id = formData["id"],
@@ -220,14 +223,14 @@ class AdminHandler(val ticketRepository: TicketRepository,
                     headline = mapOf(Pair(FRENCH, formData["headline-fr"]!!), Pair(ENGLISH, formData["headline-en"]!!)),
                     content = mapOf(Pair(FRENCH, formData["content-fr"]!!), Pair(ENGLISH, formData["content-en"]!!))
             )
-            postRepository.save(post).then(seeOther("${properties.baseUri}/admin/blog"))
+            postRepository.save(post)
+            seeOther("${properties.baseUri}/admin/blog")
         }
     }
 
     private fun Any.toJson() = objectMapper.writeValueAsString(this).replace("\"", "&quot;")
 
     private fun String.toLinks() = objectMapper.readValue<List<Link>>(this)
-
 }
 
 

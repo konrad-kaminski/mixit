@@ -3,20 +3,21 @@ package mixit.web.handler
 import mixit.model.*
 import mixit.repository.EventRepository
 import mixit.repository.UserRepository
-import mixit.util.language
+import mixit.util.coroutine.collectMap
 import org.springframework.stereotype.Component
-import org.springframework.web.reactive.function.server.ServerRequest
-import org.springframework.web.reactive.function.server.ServerResponse
+import org.springframework.web.coroutine.function.server.CoroutineServerRequest
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse
+import org.springframework.web.coroutine.function.server.language
 import java.time.LocalDate
 
 @Component
 class SponsorHandler(val userRepository: UserRepository,
                      val eventRepository: EventRepository) {
 
-    fun viewWithSponsors(view: String, title: String?, req: ServerRequest) = eventRepository.findOne("mixit17").flatMap { event ->
-        userRepository.findMany(event.sponsors.map { it.sponsorId }).collectMap(User::login).flatMap { sponsorsByLogin ->
+    suspend fun viewWithSponsors(view: String, title: String?, req: CoroutineServerRequest) = eventRepository.findOne("mixit17")?.let { event ->
+        userRepository.findMany(event.sponsors.map { it.sponsorId }).collectMap(User::login).let { sponsorsByLogin ->
             val sponsorsByEvent = event.sponsors.groupBy { it.level }
-            ServerResponse.ok().render(view, mapOf(
+            CoroutineServerResponse.ok().render(view, mapOf(
                     Pair("sponsors-gold", sponsorsByEvent[SponsorshipLevel.GOLD]?.map { it.toDto(sponsorsByLogin[it.sponsorId]!!, req.language()) }),
                     Pair("sponsors-silver", sponsorsByEvent[SponsorshipLevel.SILVER]?.map { it.toDto(sponsorsByLogin[it.sponsorId]!!, req.language()) }),
                     Pair("sponsors-hosting", sponsorsByEvent[SponsorshipLevel.HOSTING]?.map { it.toDto(sponsorsByLogin[it.sponsorId]!!, req.language()) }),

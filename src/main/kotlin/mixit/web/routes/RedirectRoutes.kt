@@ -1,13 +1,13 @@
 package mixit.controller
 
 import mixit.MixitProperties
-import mixit.util.permanentRedirect
+import org.springframework.web.coroutine.function.server.router
+import mixit.util.coroutine.permanentRedirect
 import mixit.web.handler.BlogHandler
 import mixit.web.handler.TalkHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.MediaType.TEXT_HTML
-import org.springframework.web.reactive.function.server.router
 
 @Configuration
 class RedirectRoutes(val blogHandler: BlogHandler,
@@ -21,9 +21,9 @@ class RedirectRoutes(val blogHandler: BlogHandler,
         accept(TEXT_HTML).nest {
             "/articles".nest {
                 GET("/") { permanentRedirect("${properties.baseUri}/blog") }
-                (GET("/{id}") or GET("/{id}/")).invoke(blogHandler::redirect)
+                (GET("/{id}") or GET("/{id}/")).invoke { blogHandler.redirect(it) }
             }
-            GET("/article/{id}/", blogHandler::redirect)
+            GET("/article/{id}/") { blogHandler.redirect(it) }
 
             GET("/docs/sponsor/leaflet/en") { permanentRedirect("$GOOGLE_DRIVE_URI?id=${properties.drive.en.sponsor}")}
             GET("/docs/sponsor/leaflet/fr") { permanentRedirect("$GOOGLE_DRIVE_URI?id=${properties.drive.fr.sponsor}")}
@@ -43,8 +43,8 @@ class RedirectRoutes(val blogHandler: BlogHandler,
             (GET("/session/{id}")
                     or GET("/session/{id}/")
                     or GET("/session/{id}/{sluggifiedTitle}/")
-                    or GET("/session/{id}/{sluggifiedTitle}")).invoke(talkHandler::redirectFromId)
-            GET("/talk/{slug}", talkHandler::redirectFromSlug)
+                    or GET("/session/{id}/{sluggifiedTitle}")).invoke { talkHandler.redirectFromId(it) }
+            GET("/talk/{slug}") { talkHandler.redirectFromSlug(it) }
 
             (GET("/member/{login}")
                     or GET("/profile/{login}")

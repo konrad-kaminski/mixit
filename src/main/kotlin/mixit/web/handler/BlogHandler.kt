@@ -6,11 +6,16 @@ import mixit.model.Language.*
 import mixit.repository.PostRepository
 import mixit.repository.UserRepository
 import mixit.util.*
+import mixit.util.coroutine.collectList
+import mixit.util.coroutine.collectMap
+import org.springframework.web.coroutine.function.server.body
+import org.springframework.web.coroutine.function.server.CoroutineServerRequest
+import org.springframework.web.coroutine.function.server.CoroutineServerResponse.Companion.ok
+import mixit.util.coroutine.permanentRedirect
+import mixit.util.coroutine.json
 import org.springframework.http.MediaType.*
 import org.springframework.stereotype.Component
-import org.springframework.web.reactive.function.server.*
-import org.springframework.web.reactive.function.server.ServerResponse.*
-import java.util.*
+import org.springframework.web.coroutine.function.server.language
 
 
 @Component
@@ -18,31 +23,32 @@ class BlogHandler(val repository: PostRepository,
                   val userRepository: UserRepository,
                   val properties: MixitProperties) {
 
-    fun findOneView(req: ServerRequest) = repository.findBySlug(req.pathVariable("slug"), req.language())
-            .flatMap { post -> userRepository.findOne(post.authorId).flatMap { author ->
+    suspend fun findOneView(req: CoroutineServerRequest) = repository.findBySlug(req.pathVariable("slug")!!, req.language())
+            ?.let { post ->
+                userRepository.findOne(post.authorId)?.let { author ->
                     val model = mapOf(Pair("post", post.toDto(author, req.language())), Pair("title", "blog.post.title|${post.title[req.language()]}"))
                     ok().render("post", model)
                 }
-            }.switchIfEmpty(repository.findBySlug(req.pathVariable("slug"), if (req.language() == FRENCH) ENGLISH else FRENCH).flatMap {
+            } ?: repository.findBySlug(req.pathVariable("slug")!!, if (req.language() == FRENCH) ENGLISH else FRENCH)?.let {
                 permanentRedirect("${properties.baseUri}${if (req.language() == ENGLISH) "/en" else ""}/blog/${it.slug[req.language()]}")
-            })
+            }
 
-    fun findAllView(req: ServerRequest) = repository.findAll(req.language())
+    suspend fun findAllView(req: CoroutineServerRequest) = repository.findAll(req.language())
             .collectList()
-            .flatMap { posts -> userRepository.findMany(posts.map { it.authorId }).collectMap{ it.login }.flatMap { authors ->
+            .let { posts -> userRepository.findMany(posts.map { it.authorId }).collectMap{ it.login }.let { authors ->
                 val model = mapOf(Pair("posts", posts.map { it.toDto(authors[it.authorId]!!, req.language()) }), Pair("title", "blog.title"))
                 ok().render("blog", model)
             }}
 
-    fun findOne(req: ServerRequest) = ok().json().body(repository.findOne(req.pathVariable("id")))
+    suspend fun findOne(req: CoroutineServerRequest) = ok().json().body(repository.findOne(req.pathVariable("id")!!))
 
-    fun findAll(req: ServerRequest) = ok().json().body(repository.findAll())
+    suspend fun findAll(req: CoroutineServerRequest) = ok().json().body(repository.findAll())
 
-    fun redirect(req: ServerRequest) = repository.findOne(req.pathVariable("id")).flatMap {
+    suspend fun redirect(req: CoroutineServerRequest) = repository.findOne(req.pathVariable("id")!!)?.let {
         permanentRedirect("${properties.baseUri}/blog/${it.slug[req.language()]}")
     }
 
-    fun feed(req: ServerRequest) = ok().contentType(APPLICATION_ATOM_XML).render("feed", mapOf(Pair("feed", repository.findAll(req.language()).collectList().map { it.toFeed(req.language(), "blog.feed.title", "/blog") })))
+    suspend fun feed(req: CoroutineServerRequest) = ok().contentType(APPLICATION_ATOM_XML).render("feed", mapOf(Pair("feed", repository.findAll(req.language()).collectList().let { it.toFeed(req.language(), "blog.feed.title", "/blog") })))
 
 }
 

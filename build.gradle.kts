@@ -5,7 +5,11 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 buildscript {
     repositories {
         mavenCentral()
+        jcenter()
         maven { setUrl("https://repo.spring.io/milestone") }
+        maven {
+            setUrl("http://dl.bintray.com/kotlin/kotlin-eap-1.1")
+        }
     }
 
     dependencies {
@@ -31,9 +35,13 @@ apply {
 version = "1.0.0-SNAPSHOT"
 
 repositories {
+    jcenter()
     mavenCentral()
     maven { setUrl("https://repo.spring.io/milestone") }
     maven { setUrl("https://repo.spring.io/snapshot") }
+    maven {
+        setUrl("http://dl.bintray.com/kotlin/kotlin-eap-1.1")
+    }
 }
 
 tasks.withType<KotlinCompile> {
@@ -65,6 +73,9 @@ dependencies {
     compile("com.samskivert:jmustache:1.13")
     compile("com.atlassian.commonmark:commonmark:0.9.0")
     compile("com.atlassian.commonmark:commonmark-ext-autolink:0.9.0")
+    compile("org.jetbrains.kotlinx:kotlinx-coroutines-core:0.16")
+    compile("org.jetbrains.kotlinx:kotlinx-coroutines-reactor:0.16")
+
 
     compile("io.projectreactor:reactor-kotlin-extensions:1.0.0.M2")
     testCompile("io.projectreactor.addons:reactor-test")
